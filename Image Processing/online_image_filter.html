@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>通用迭代滤波器可视化工具</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            padding-top: 100%;
+            background-color: #f0f4f8;
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        #imageCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            cursor: crosshair;
+        }
+        .loader {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        /* 用于隐藏/显示参数区域的辅助类 */
+        .param-group.hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div class="container mx-auto p-4 md:p-8">
+        <header class="text-center mb-8">
+            <h1 class="text-3xl md:text-4xl font-bold text-gray-900">通用迭代滤波器可视化工具</h1>
+            <p class="mt-2 text-md text-gray-600">支持平均、高斯和自定义核滤波</p>
+        </header>
+
+        <!-- 主控制面板 -->
+        <div class="bg-white p-6 rounded-xl shadow-lg mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-end">
+                <!-- 步骤1: 上传图片 -->
+                <div class="flex flex-col">
+                    <label for="imageLoader" class="mb-2 font-semibold text-gray-700">第一步: 上传图片</label>
+                    <input type="file" id="imageLoader" accept="image/*" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                </div>
+
+                <!-- 步骤2: 设置参数 -->
+                <div class="flex flex-col">
+                     <label for="filterType" class="mb-2 font-semibold text-gray-700">第二步: 选择滤波器</label>
+                    <select id="filterType" class="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500">
+                        <option value="average" selected>平均滤波</option>
+                        <option value="gaussian">高斯滤波</option>
+                        <option value="custom">自定义核</option>
+                    </select>
+                </div>
+                
+                <div class="flex flex-col lg:col-span-2">
+                    <label class="mb-2 font-semibold text-gray-700">第三步: 调整参数</label>
+                    <!-- 参数组 -->
+                    <div id="params-container" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                       <div>
+                            <label for="iterations" class="block text-sm font-medium text-gray-500">迭代次数</label>
+                            <input type="number" id="iterations" value="10" min="1" max="100" class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                       </div>
+                       <!-- 平均/高斯滤波参数 -->
+                       <div class="param-group" id="param-kernel-size">
+                            <label for="kernelSize" class="block text-sm font-medium text-gray-500">核大小</label>
+                            <input type="number" id="kernelSize" value="3" min="3" max="15" step="2" class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                       </div>
+                       <!-- 高斯滤波参数 -->
+                       <div class="param-group hidden" id="param-gaussian">
+                            <label for="sigma" class="block text-sm font-medium text-gray-500">Sigma (σ)</label>
+                            <input type="number" id="sigma" value="1.4" min="0.1" max="10" step="0.1" class="w-full mt-1 p-2 border border-gray-300 rounded-lg">
+                       </div>
+                       <!-- 自定义核参数 -->
+                       <div class="param-group hidden" id="param-custom">
+                            <label for="customKernel" class="block text-sm font-medium text-gray-500">自定义核</label>
+                           <textarea id="customKernel" rows="3" class="w-full mt-1 p-2 border border-gray-300 rounded-lg font-mono text-xs" placeholder="-1,-1,-1;&#10;-1,8,-1;&#10;-1,-1,-1"></textarea>
+                           <div class="mt-2 flex items-center">
+                                <input type="checkbox" id="normalizeKernel" class="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <label for="normalizeKernel" class="ml-2 block text-sm text-gray-700">归一化核</label>
+                           </div>
+                       </div>
+                    </div>
+                </div>
+
+                <!-- 步骤4: 开始处理 -->
+                <div class="flex flex-col">
+                    <label class="mb-2 font-semibold text-gray-700 invisible">第四步</label>
+                    <button id="startBtn" class="w-full bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-300 ease-in-out disabled:bg-gray-400">
+                        开始滤波
+                    </button>
+                </div>
+            </div>
+             <!-- 提示信息区域 -->
+            <div id="statusMessage" class="mt-4 text-center text-sm font-medium text-red-600 h-5"></div>
+        </div>
+
+        <!-- 可视化区域 (与之前版本相同) -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-bold mb-4 text-center">图像预览</h2>
+                <div class="canvas-container shadow-inner">
+                    <canvas id="imageCanvas"></canvas>
+                </div>
+                <div id="imageInfo" class="mt-4 text-center text-gray-600 font-mono"><p>请先上传图片...</p>
+                    <div id="loadingIndicator" class="hidden items-center justify-center mt-2"><div class="loader"></div><span class="ml-3 font-semibold">处理中...</span></div>
+                </div>
+            </div>
+            <div class="bg-white p-6 rounded-xl shadow-lg">
+                <h2 class="text-xl font-bold mb-4 text-center">像素值变化曲线</h2>
+                <div class="relative h-96"><canvas id="pixelChart"></canvas></div>
+                <div id="chartInfo" class="mt-4 text-center text-gray-600 font-mono"><p>此处显示RGB值变化</p></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- DOM 元素获取 ---
+        const imageLoader = document.getElementById('imageLoader');
+        const imageCanvas = document.getElementById('imageCanvas');
+        const imageCtx = imageCanvas.getContext('2d', { willReadFrequently: true });
+        const startBtn = document.getElementById('startBtn');
+        const iterationsInput = document.getElementById('iterations');
+        const kernelSizeInput = document.getElementById('kernelSize');
+        const sigmaInput = document.getElementById('sigma');
+        const customKernelInput = document.getElementById('customKernel');
+        const normalizeKernelCheckbox = document.getElementById('normalizeKernel');
+        const filterTypeSelect = document.getElementById('filterType');
+        const imageInfo = document.getElementById('imageInfo');
+        const chartInfo = document.getElementById('chartInfo');
+        const statusMessage = document.getElementById('statusMessage');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+
+        // --- 全局状态变量 ---
+        let originalImageData = null;
+        let currentImageData = null;
+        let selectedPixel = null; // {x, y}
+        let chart = null;
+        let isProcessing = false;
+
+        // --- 初始化 & 事件监听 ---
+        window.onload = initialize;
+        window.onresize = initialize; 
+        imageLoader.addEventListener('change', handleImageUpload);
+        imageCanvas.addEventListener('click', handlePixelSelect);
+        startBtn.addEventListener('click', startFilteringProcess);
+        filterTypeSelect.addEventListener('change', handleFilterTypeChange);
+
+        function initialize() {
+            // ... (canvas和chart的初始化代码与之前版本相同，此处为简洁省略)
+            const canvasContainer = imageCanvas.parentElement;
+            imageCanvas.width = canvasContainer.clientWidth;
+            imageCanvas.height = canvasContainer.clientHeight;
+            const chartCtx = document.getElementById('pixelChart').getContext('2d');
+            if (chart) chart.destroy();
+            chart = new Chart(chartCtx, { type: 'line', data: { labels: [], datasets: [ { label: 'Red', data: [], borderColor: 'rgb(255, 99, 132)', backgroundColor: 'rgba(255, 99, 132, 0.5)', tension: 0.1 }, { label: 'Green', data: [], borderColor: 'rgb(75, 192, 192)', backgroundColor: 'rgba(75, 192, 192, 0.5)', tension: 0.1 }, { label: 'Blue', data: [], borderColor: 'rgb(54, 162, 235)', backgroundColor: 'rgba(54, 162, 235, 0.5)', tension: 0.1 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { title: { display: true, text: '迭代次数' } }, y: { title: { display: true, text: '像素值 (0-255)' }, min: 0, max: 255 } }, animation: { duration: 200 } } });
+        }
+        
+        /**
+         * 根据选择的滤波器类型，显示或隐藏对应的参数输入框
+         */
+        function handleFilterTypeChange() {
+            const type = filterTypeSelect.value;
+            document.getElementById('param-kernel-size').classList.toggle('hidden', type === 'custom');
+            document.getElementById('param-gaussian').classList.toggle('hidden', type !== 'gaussian');
+            document.getElementById('param-custom').classList.toggle('hidden', type !== 'custom');
+        }
+
+        // --- 核心功能函数 ---
+
+        /**
+         * 开始迭代滤波过程
+         */
+        async function startFilteringProcess() {
+            // 验证
+            if (!originalImageData) { statusMessage.textContent = '请先上传一张图片！'; return; }
+            if (!selectedPixel) { statusMessage.textContent = '请先在图片上选择一个像素点！'; return; }
+
+            toggleControls(true);
+            resetChart();
+            statusMessage.textContent = '';
+
+            const iterations = parseInt(iterationsInput.value);
+            let kernel;
+
+            // 1. 根据滤波器类型生成卷积核
+            try {
+                const type = filterTypeSelect.value;
+                const kernelSize = parseInt(kernelSizeInput.value);
+                
+                switch(type) {
+                    case 'average':
+                        kernel = generateAverageKernel(kernelSize);
+                        break;
+                    case 'gaussian':
+                        const sigma = parseFloat(sigmaInput.value);
+                        kernel = generateGaussianKernel(kernelSize, sigma);
+                        break;
+                    case 'custom':
+                        kernel = parseCustomKernel(customKernelInput.value);
+                        if (normalizeKernelCheckbox.checked) {
+                            kernel = normalizeKernel(kernel);
+                        }
+                        break;
+                }
+            } catch (error) {
+                statusMessage.textContent = `错误: ${error.message}`;
+                toggleControls(false);
+                return;
+            }
+            
+            // 2. 开始迭代
+            let imageDataForFilter = new ImageData(new Uint8ClampedArray(originalImageData.data), originalImageData.width, originalImageData.height);
+            updateChart(0, getPixelValue(imageDataForFilter, selectedPixel.x, selectedPixel.y));
+
+            for (let i = 1; i <= iterations; i++) {
+                statusMessage.textContent = `正在进行第 ${i} / ${iterations} 次迭代...`;
+                await new Promise(resolve => setTimeout(resolve, 50)); 
+                
+                // 3. 应用卷积
+                imageDataForFilter = applyConvolution(imageDataForFilter, kernel);
+                currentImageData = imageDataForFilter;
+
+                redrawWithMarker();
+                updateChart(i, getPixelValue(imageDataForFilter, selectedPixel.x, selectedPixel.y));
+                imageInfo.innerHTML = `当前迭代: ${i}<br>选中像素坐标: (${selectedPixel.x}, ${selectedPixel.y})`;
+            }
+
+            toggleControls(false);
+            statusMessage.textContent = '处理完成！';
+        }
+
+        /**
+         * 通用卷积函数
+         * @param {ImageData} sourceImageData - 源图像数据
+         * @param {number[][]} kernel - 二维卷积核
+         * @returns {ImageData} - 滤波后的图像数据
+         */
+        function applyConvolution(sourceImageData, kernel) {
+            const src = sourceImageData.data;
+            const width = sourceImageData.width;
+            const height = sourceImageData.height;
+            const destImageData = new ImageData(width, height);
+            const dest = destImageData.data;
+
+            const kernelSize = kernel.length;
+            const halfKernel = Math.floor(kernelSize / 2);
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    let rSum = 0, gSum = 0, bSum = 0;
+
+                    for (let ky = 0; ky < kernelSize; ky++) {
+                        for (let kx = 0; kx < kernelSize; kx++) {
+                            const pixelY = y + (ky - halfKernel);
+                            const pixelX = x + (kx - halfKernel);
+
+                            if (pixelX >= 0 && pixelX < width && pixelY >= 0 && pixelY < height) {
+                                const index = (pixelY * width + pixelX) * 4;
+                                const weight = kernel[ky][kx];
+                                rSum += src[index] * weight;
+                                gSum += src[index + 1] * weight;
+                                bSum += src[index + 2] * weight;
+                            }
+                        }
+                    }
+
+                    const destIndex = (y * width + x) * 4;
+                    dest[destIndex] = rSum;
+                    dest[destIndex + 1] = gSum;
+                    dest[destIndex + 2] = bSum;
+                    dest[destIndex + 3] = src[destIndex + 3]; // 保持原alpha通道
+                }
+            }
+            return destImageData;
+        }
+
+        // --- 卷积核生成函数 ---
+
+        function generateAverageKernel(size) {
+            if (size % 2 === 0) throw new Error("核大小必须是奇数");
+            const total = size * size;
+            const value = 1 / total;
+            return Array(size).fill(Array(size).fill(value));
+        }
+
+        function generateGaussianKernel(size, sigma) {
+            if (size % 2 === 0) throw new Error("核大小必须是奇数");
+            const kernel = Array(size).fill(0).map(() => Array(size).fill(0));
+            const half = Math.floor(size / 2);
+            let sum = 0;
+            const twoSigmaSq = 2 * sigma * sigma;
+            
+            for (let y = -half; y <= half; y++) {
+                for (let x = -half; x <= half; x++) {
+                    const value = Math.exp(-(x * x + y * y) / twoSigmaSq) / (Math.PI * twoSigmaSq);
+                    kernel[y + half][x + half] = value;
+                    sum += value;
+                }
+            }
+            // 归一化
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    kernel[i][j] /= sum;
+                }
+            }
+            return kernel;
+        }
+
+        function parseCustomKernel(text) {
+            const rows = text.trim().split(';').map(r => r.trim());
+            const kernel = rows.map(row => 
+                row.split(',').map(val => {
+                    const num = parseFloat(val);
+                    if (isNaN(num)) throw new Error("自定义核包含无效数字");
+                    return num;
+                })
+            );
+            const size = kernel.length;
+            if (size === 0 || size % 2 === 0) throw new Error("自定义核必须是奇数尺寸 (例如 3x3, 5x5)");
+            for (const row of kernel) {
+                if (row.length !== size) throw new Error("自定义核必须是方形矩阵");
+            }
+            return kernel;
+        }
+        
+        function normalizeKernel(kernel) {
+            const size = kernel.length;
+            let sum = 0;
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    sum += kernel[i][j];
+                }
+            }
+            if (sum === 0) return kernel; // 避免除以零
+            const newKernel = Array(size).fill(0).map(() => Array(size).fill(0));
+            for (let i = 0; i < size; i++) {
+                for (let j = 0; j < size; j++) {
+                    newKernel[i][j] = kernel[i][j] / sum;
+                }
+            }
+            return newKernel;
+        }
+
+        // --- 其他辅助函数 (与之前版本相同) ---
+        function handleImageUpload(e) { /* ... */ const file = e.target.files[0]; if (!file) return; const reader = new FileReader(); reader.onload = function(event) { const img = new Image(); img.onload = function() { imageCtx.clearRect(0, 0, imageCanvas.width, imageCanvas.height); const aspectRatio = img.width / img.height; let drawWidth = imageCanvas.width; let drawHeight = imageCanvas.height; if (img.width > img.height) { drawHeight = drawWidth / aspectRatio; } else { drawWidth = drawHeight * aspectRatio; } const x = (imageCanvas.width - drawWidth) / 2; const y = (imageCanvas.height - drawHeight) / 2; imageCtx.drawImage(img, x, y, drawWidth, drawHeight); originalImageData = imageCtx.getImageData(0, 0, imageCanvas.width, imageCanvas.height); currentImageData = originalImageData; selectedPixel = null; imageInfo.innerHTML = '<p>图片加载成功！请在图上点击选择一个像素点。</p>'; chartInfo.textContent = '等待选择像素...'; resetChart(); }; img.src = event.target.result; }; reader.readAsDataURL(file); }
+        function handlePixelSelect(e) { /* ... */ if (!originalImageData || isProcessing) return; const rect = imageCanvas.getBoundingClientRect(); const x = Math.floor(e.clientX - rect.left); const y = Math.floor(e.clientY - rect.top); const pixelIndex = (y * imageCanvas.width + x) * 4; if (originalImageData.data[pixelIndex + 3] === 0) { statusMessage.textContent = '请在图像区域内选择像素！'; setTimeout(() => statusMessage.textContent = '', 3000); return; } selectedPixel = { x, y }; redrawWithMarker(); imageInfo.innerHTML = `当前迭代: 0<br>选中像素坐标: (${x}, ${y})`; const initialPixelValue = getPixelValue(originalImageData, x, y); updateChart(0, initialPixelValue); chartInfo.innerHTML = `初始值 - R: ${initialPixelValue.r}, G: ${initialPixelValue.g}, B: ${initialPixelValue.b}`; }
+        function redrawWithMarker() { /* ... */ if (!currentImageData) return; imageCtx.putImageData(currentImageData, 0, 0); if (selectedPixel) { const { x, y } = selectedPixel; imageCtx.beginPath(); imageCtx.arc(x, y, 8, 0, 2 * Math.PI); imageCtx.strokeStyle = 'rgba(255, 0, 0, 0.9)'; imageCtx.lineWidth = 2; imageCtx.stroke(); imageCtx.beginPath(); imageCtx.arc(x, y, 1, 0, 2 * Math.PI); imageCtx.fillStyle = 'rgba(255, 255, 255, 0.9)'; imageCtx.fill(); } }
+        function getPixelValue(imageData, x, y) { /* ... */ const index = (y * imageData.width + x) * 4; return { r: imageData.data[index], g: imageData.data[index + 1], b: imageData.data[index + 2] }; }
+        function updateChart(iteration, pixelValue) { /* ... */ if (!chart) return; if (iteration === 0) { resetChart(); } chart.data.labels.push(iteration); chart.data.datasets[0].data.push(pixelValue.r); chart.data.datasets[1].data.push(pixelValue.g); chart.data.datasets[2].data.push(pixelValue.b); chart.update(); }
+        function resetChart() { /* ... */ if (!chart) return; chart.data.labels = []; chart.data.datasets.forEach(dataset => { dataset.data = []; }); chart.update(); }
+        function toggleControls(processing) { /* ... */ isProcessing = processing; startBtn.disabled = processing; imageLoader.disabled = processing; iterationsInput.disabled = processing; kernelSizeInput.disabled = processing; sigmaInput.disabled = processing; customKernelInput.disabled = processing; normalizeKernelCheckbox.disabled = processing; filterTypeSelect.disabled = processing; if (processing) { loadingIndicator.classList.remove('hidden'); loadingIndicator.classList.add('flex'); } else { loadingIndicator.classList.add('hidden'); loadingIndicator.classList.remove('flex'); } }
+    </script>
+</body>
+</html>
