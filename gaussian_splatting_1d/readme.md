@@ -16,3 +16,5 @@ We will need to finish several parts of code, mainly contain:
 - A 1D Gaussian Render, using alpha-blending as original 3D gaussian splatting;
 - A Gaussian dataclass, which contains *Opacity*, *Position*, *Color*...
 - An optimizer based on PyTorch, which make these gaussian could be optimized;
+
+Attention! We will not implement the <span style="color: red">Adaptive Control Strategy</span> which is really important and necessary for 3D Gaussian Splatting, refer to the original paper. This means our 1D gaussians number will keep the same, won't be changed after initializaion.
