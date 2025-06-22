@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D梯度下降可视化</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            overflow: hidden; /* 防止滚动条出现 */
+        }
+        .input-group {
+            margin-bottom: 1rem;
+        }
+        .input-label {
+            display: block;
+            margin-bottom: 0.25rem;
+            font-size: 0.875rem;
+            color: #cbd5e1;
+        }
+        .input-field {
+            width: 100%;
+            background-color: #2d3748;
+            border: 1px solid #4a5568;
+            color: white;
+            padding: 0.5rem;
+            border-radius: 0.375rem;
+            outline: none;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus {
+            border-color: #4299e1;
+        }
+        .btn {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            border: none;
+            cursor: pointer;
+            font-weight: 500;
+            transition: background-color 0.2s;
+        }
+        .btn-primary {
+            background-color: #3182ce;
+            color: white;
+        }
+        .btn-primary:hover {
+            background-color: #2b6cb0;
+        }
+        .btn-secondary {
+            background-color: #4a5568;
+            color: #e2e8f0;
+        }
+         .btn-secondary:hover {
+            background-color: #2d3748;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <div id="container" class="w-full h-full fixed top-0 left-0 z-0"></div>
+
+    <div id="ui" class="absolute top-4 left-4 bg-gray-800 bg-opacity-80 p-6 rounded-lg shadow-xl w-full max-w-sm text-sm">
+        <h1 class="text-xl font-bold mb-4">3D梯度下降可视化</h1>
+        
+        <div class="input-group">
+            <label class="input-label font-medium">平面方程: w1*x + w2*y + w3*z = d</label>
+            <p class="text-xs text-gray-400 mb-2">提示: 所有系数均可自由指定</p>
+            <div class="grid grid-cols-3 gap-2 mb-2">
+                <div>
+                    <label for="w1" class="input-label">w1</label>
+                    <input type="number" id="w1" value="1" class="input-field">
+                </div>
+                <div>
+                    <label for="w2" class="input-label">w2</label>
+                    <input type="number" id="w2" value="1" class="input-field">
+                </div>
+                <div>
+                    <label for="w3" class="input-label">w3</label>
+                    <input type="number" id="w3" value="1" class="input-field">
+                </div>
+            </div>
+            <div>
+                <label for="d" class="input-label">d</label>
+                <input type="number" id="d" value="2" step="0.1" class="input-field">
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label class="input-label font-medium">目标点 P(x₀, y₀, z₀)</label>
+            <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label for="x0" class="input-label">x₀</label>
+                    <input type="number" id="x0" value="3" class="input-field">
+                </div>
+                <div>
+                    <label for="y0" class="input-label">y₀</label>
+                    <input type="number" id="y0" value="4" class="input-field">
+                </div>
+                <div>
+                    <label for="z0" class="input-label">z₀</label>
+                    <input type="number" id="z0" value="5" class="input-field">
+                </div>
+            </div>
+        </div>
+        
+        <div class="input-group">
+            <label class="input-label font-medium">优化参数</label>
+             <div class="grid grid-cols-3 gap-2">
+                <div>
+                    <label for="learningRate" class="input-label">学习率 (α)</label>
+                    <input type="number" id="learningRate" value="0.05" step="0.01" class="input-field">
+                </div>
+                <div>
+                    <label for="iterations" class="input-label">迭代次数</label>
+                    <input type="number" id="iterations" value="100" class="input-field">
+                </div>
+                 <div>
+                    <label for="lambda" class="input-label">平面权重 (λ)</label>
+                    <input type="number" id="lambda" value="10.0" step="1" class="input-field">
+                </div>
+            </div>
+             <p class="text-xs text-gray-400 mt-2">损失 L = (到目标点距离)² + λ * (到平面距离)²</p>
+             <div class="flex items-center mt-2">
+                <input type="checkbox" id="toggleAxes" class="h-4 w-4 rounded bg-gray-700 border-gray-600 text-blue-600 focus:ring-blue-500" checked>
+                <label for="toggleAxes" class="ml-2 text-xs text-gray-300">显示坐标系</label>
+            </div>
+        </div>
+
+        <div class="flex space-x-2 mt-4">
+            <button id="startBtn" class="btn btn-primary w-full">开始优化</button>
+            <button id="resetBtn" class="btn btn-secondary">重置场景</button>
+        </div>
+        
+        <div id="info" class="mt-4 p-3 bg-gray-900 rounded-md text-xs space-y-1">
+            <p>状态: <span id="status">准备就绪</span></p>
+            <p>迭代: <span id="iterCount">N/A</span></p>
+            <p>当前点 (x,y,z): <span id="currentPos">N/A</span></p>
+            <p>总损失: <span id="loss">N/A</span></p>
+            <div id="finalDistances" class="hidden border-t border-gray-700 mt-2 pt-2 space-y-1">
+                 <p>到目标点距离: <span id="distToPoint">N/A</span></p>
+                 <p>到平面距离: <span id="distToPlane">N/A</span></p>
+            </div>
+        </div>
+    </div>
+
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // --- 全局变量 ---
+        let scene, camera, renderer, controls, axesHelper;
+        let planeMesh, targetPointMesh, currentPointMesh, pathLine;
+        let distPointLine, distPlaneLine;
+        let isOptimizing = false;
+
+        // --- DOM 元素 ---
+        const ui = {
+            w1: document.getElementById('w1'), w2: document.getElementById('w2'), w3: document.getElementById('w3'),
+            d: document.getElementById('d'), x0: document.getElementById('x0'), y0: document.getElementById('y0'), z0: document.getElementById('z0'),
+            learningRate: document.getElementById('learningRate'), iterations: document.getElementById('iterations'), lambda: document.getElementById('lambda'), 
+            toggleAxes: document.getElementById('toggleAxes'), 
+            startBtn: document.getElementById('startBtn'), resetBtn: document.getElementById('resetBtn'),
+            status: document.getElementById('status'), iterCount: document.getElementById('iterCount'),
+            currentPos: document.getElementById('currentPos'), loss: document.getElementById('loss'),
+            finalDistances: document.getElementById('finalDistances'), 
+            distToPoint: document.getElementById('distToPoint'), 
+            distToPlane: document.getElementById('distToPlane'), 
+        };
+        
+        // --- 初始化函数 ---
+        function init() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x111827);
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(5, 6, 8);
+            const container = document.getElementById('container');
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            axesHelper = new THREE.AxesHelper(10);
+            scene.add(axesHelper);
+            window.addEventListener('resize', onWindowResize);
+            ui.startBtn.addEventListener('click', startOptimization);
+            ui.resetBtn.addEventListener('click', resetScene);
+            ui.toggleAxes.addEventListener('change', (e) => { axesHelper.visible = e.target.checked; });
+            resetScene();
+            animate();
+        }
+
+        // --- 场景更新与绘制 ---
+        
+        function getInputs() {
+            const w_vec = new THREE.Vector3(
+                parseFloat(ui.w1.value) || 0, 
+                parseFloat(ui.w2.value) || 0, 
+                parseFloat(ui.w3.value) || 0
+            );
+            
+            if (w_vec.lengthSq() < 1e-9) { 
+                console.error("w1, w2, w3 不能都为零！"); 
+                // 默认给一个值防止崩溃
+                w_vec.set(1, 0, 0);
+                ui.w1.value = 1;
+            }
+
+            return {
+                w: w_vec, // 不再归一化
+                d: parseFloat(ui.d.value) || 0,
+                p0: new THREE.Vector3(
+                    parseFloat(ui.x0.value) || 0, 
+                    parseFloat(ui.y0.value) || 0,
+                    parseFloat(ui.z0.value) || 0
+                ),
+                alpha: parseFloat(ui.learningRate.value) || 0.1,
+                maxIters: parseInt(ui.iterations.value) || 100,
+                lambda: parseFloat(ui.lambda.value) >= 0 ? parseFloat(ui.lambda.value) : 10.0
+            };
+        }
+
+        function resetScene() {
+            if (isOptimizing) return;
+            
+            const objectsToRemove = [planeMesh, targetPointMesh, currentPointMesh, pathLine, distPointLine, distPlaneLine];
+            objectsToRemove.forEach(obj => {
+                if (obj) {
+                    if (obj.geometry) obj.geometry.dispose();
+                    if (obj.material) obj.material.dispose();
+                    scene.remove(obj);
+                }
+            });
+            planeMesh = targetPointMesh = currentPointMesh = pathLine = distPointLine = distPlaneLine = null;
+
+            ui.finalDistances.classList.add('hidden');
+
+            const params = getInputs();
+            if (!params) return;
+
+            drawPlane(params.w, params.d);
+            drawPoints(params.p0);
+            
+            updateInfoPanel({ status: "准备就绪", iter: "N/A", pos: "N/A", loss: "N/A" });
+        }
+
+        function drawPlane(normal, constant) {
+            planeMesh = new THREE.Mesh(
+                new THREE.PlaneGeometry(20, 20, 10, 10),
+                new THREE.MeshPhongMaterial({ color: 0x3b82f6, side: THREE.DoubleSide, transparent: true, opacity: 0.5, shininess: 50 })
+            );
+            planeMesh.lookAt(normal);
+            // 为非单位法向量计算正确的位置
+            const positionOnPlane = normal.clone().multiplyScalar(constant / normal.lengthSq());
+            planeMesh.position.copy(positionOnPlane); 
+            scene.add(planeMesh);
+        }
+
+        function drawPoints(p0) {
+            targetPointMesh = new THREE.Mesh(new THREE.SphereGeometry(0.15, 32, 16), new THREE.MeshBasicMaterial({ color: 0x10b981 }));
+            targetPointMesh.position.copy(p0);
+            scene.add(targetPointMesh);
+
+            currentPointMesh = new THREE.Mesh(new THREE.SphereGeometry(0.1, 32, 16), new THREE.MeshBasicMaterial({ color: 0x3b82f6 }));
+            currentPointMesh.visible = false;
+            scene.add(currentPointMesh);
+        }
+        
+        // --- 优化算法 ---
+
+        async function startOptimization() {
+            if (isOptimizing) return;
+            isOptimizing = true;
+            ui.startBtn.disabled = true;
+            ui.startBtn.textContent = "优化中...";
+            ui.status.textContent = "运行中";
+
+            resetScene(); 
+            await new Promise(resolve => setTimeout(resolve, 100)); 
+
+            const params = getInputs();
+            if (!params) { isOptimizing = false; ui.startBtn.disabled = false; ui.startBtn.textContent = "开始优化"; return; }
+            const { w, d, p0, alpha, maxIters, lambda } = params;
+            
+            const w_len_sq = w.lengthSq(); // 预计算w长度的平方
+
+            let p_current = new THREE.Vector3((Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10, (Math.random() - 0.5) * 10);
+            
+            const pathPoints = [p_current.clone()];
+            pathLine = new THREE.Line(new THREE.BufferGeometry().setFromPoints(pathPoints), new THREE.LineBasicMaterial({ color: 0xfbbf24 }));
+            scene.add(pathLine);
+            
+            currentPointMesh.position.copy(p_current);
+            currentPointMesh.visible = true;
+
+            for (let i = 0; i < maxIters; i++) {
+                const distNumerator = p_current.dot(w) - d;
+                const distToPlaneSq = Math.pow(distNumerator, 2) / w_len_sq;
+                const totalLoss = p_current.distanceToSquared(p0) + lambda * distToPlaneSq;
+                updateInfoPanel({ iter: `${i + 1}/${maxIters}`, pos: p_current, loss: totalLoss.toFixed(4) });
+
+                const grad_dist = p_current.clone().sub(p0).multiplyScalar(2);
+                // 为非单位法向量计算正确的梯度
+                const grad_plane = w.clone().multiplyScalar(2 * lambda * distNumerator / w_len_sq);
+                const total_grad = grad_dist.add(grad_plane);
+                
+                p_current.sub(total_grad.multiplyScalar(alpha));
+                
+                currentPointMesh.position.copy(p_current);
+                pathPoints.push(p_current.clone());
+                pathLine.geometry.setFromPoints(pathPoints);
+
+                await new Promise(resolve => setTimeout(resolve, 20)); 
+                if (!isOptimizing) break; 
+            }
+            
+            const finalDistNumerator = p_current.dot(w) - d;
+            const finalDistToPlane = Math.abs(finalDistNumerator) / Math.sqrt(w_len_sq);
+            const finalLoss = p_current.distanceToSquared(p0) + lambda * Math.pow(finalDistToPlane, 2);
+            updateInfoPanel({ status: "完成", iter: `${maxIters}/${maxIters}`, pos: p_current, loss: finalLoss.toFixed(4) });
+            
+            const finalDistToPoint = p_current.distanceTo(p0);
+            ui.distToPoint.textContent = finalDistToPoint.toFixed(4);
+            ui.distToPlane.textContent = finalDistToPlane.toFixed(4);
+            ui.finalDistances.classList.remove('hidden');
+
+            distPointLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([p_current, p0]),
+                new THREE.LineBasicMaterial({ color: 0xff00ff })
+            );
+            scene.add(distPointLine);
+            
+            // 为非单位法向量计算正确的投影点
+            const projectedPoint = p_current.clone().sub(w.clone().multiplyScalar(finalDistNumerator / w_len_sq));
+            // FIX: 补全被截断的代码
+            distPlaneLine = new THREE.Line(
+                new THREE.BufferGeometry().setFromPoints([p_current, projectedPoint]),
+                new THREE.LineDashedMaterial({ color: 0x00ffff, dashSize: 0.1, gapSize: 0.05 }) // 青色虚线
+            );
+            distPlaneLine.computeLineDistances();
+            scene.add(distPlaneLine);
+
+            isOptimizing = false;
+            ui.startBtn.disabled = false;
+            ui.startBtn.textContent = "开始优化";
+        }
+
+        // --- UI 更新函数 ---
+        function updateInfoPanel({ status, iter, pos, loss }) {
+            if (status) ui.status.textContent = status;
+            if (iter) ui.iterCount.textContent = iter;
+            if (pos) {
+                if (typeof pos === 'object' && pos !== null && typeof pos.x === 'number') {
+                    ui.currentPos.textContent = `(${pos.x.toFixed(2)}, ${pos.y.toFixed(2)}, ${pos.z.toFixed(2)})`;
+                } else {
+                    ui.currentPos.textContent = pos.toString();
+                }
+            }
+            if (loss) ui.loss.textContent = loss;
+        }
+
+        // --- 动画循环和窗口大小调整 ---
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- 启动 ---
+        init();
+    </script>
+</body>
+</html>
