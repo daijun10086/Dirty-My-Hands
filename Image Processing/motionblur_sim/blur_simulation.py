@@ -122,12 +122,12 @@ def batch_process_images(input_dir, output_dir, blur_strength, blur_angle):
 if __name__ == "__main__":
     # 1. 设置输入和输出目录
     # 请使用您的实际路径，Windows路径示例: "C:\\Users\\YourUser\\Desktop\\Input"
-    INPUT_DIRECTORY = "./imgs"
-    OUTPUT_DIRECTORY = "./output_images_blurred"
+    INPUT_DIRECTORY = "/Users/daijun/Downloads/sharp_imgs"
+    OUTPUT_DIRECTORY = "/Users/daijun/Downloads/blurred_imgs_41"
 
     # 2. 控制运动模糊效果的参数
     # BLUR_STRENGTH: 模糊强度/长度。必须是正奇数。数值越大，模糊越明显。
-    BLUR_STRENGTH = 9
+    BLUR_STRENGTH = 41
     
     # BLUR_ANGLE: 模糊角度 (0-360)。0是水平，45是斜向，90是垂直。
     BLUR_ANGLE = 30.0
